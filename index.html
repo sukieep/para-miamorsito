@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Una aventura para ti ♥</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #1a1430;
+    font-family: 'Press Start 2P', monospace;
+    color: #fff;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  #wrap {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    --u: 3px; /* 1 "pixel" del juego; JavaScript lo ajusta al tamaño de la pantalla */
+    width: calc(var(--u) * 320); height: calc(var(--u) * 192);
+    box-shadow: 0 0 0 calc(var(--u) * 2) #2b1d2e, 0 calc(var(--u) * 4) calc(var(--u) * 16) rgba(0,0,0,.5);
+  }
+  canvas {
+    width: 100%; height: 100%; display: block;
+    image-rendering: pixelated; image-rendering: crisp-edges;
+  }
+  .hud {
+    position: absolute; top: calc(var(--u) * 6); left: calc(var(--u) * 8); right: calc(var(--u) * 8);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: calc(var(--u) * 7); text-shadow: calc(var(--u)) calc(var(--u)) 0 #2b1d2e;
+    pointer-events: none;
+  }
+  .hud .heart { color: #ff5c8a; }
+  #soundBtn {
+    pointer-events: auto; cursor: pointer; background: rgba(43,29,46,.55); border: none; color: #fff;
+    font-family: inherit; font-size: calc(var(--u) * 7); padding: calc(var(--u) * 3) calc(var(--u) * 4);
+    border-radius: calc(var(--u) * 2);
+  }
+  .overlay {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    gap: calc(var(--u) * 9); padding: calc(var(--u) * 12);
+    text-shadow: calc(var(--u)) calc(var(--u)) 0 #2b1d2e;
+  }
+  .overlay.show { display: flex; }
+  #title { background: rgba(26,20,48,.45); cursor: pointer; justify-content: flex-start; padding-top: calc(var(--u) * 20); gap: calc(var(--u) * 8); }
+  #title h1 { font-size: calc(var(--u) * 13); line-height: 1.5; color: #ffd6e5; }
+  #title .para { font-size: calc(var(--u) * 8); color: #ffd166; }
+  #title .blink { font-size: calc(var(--u) * 7); animation: blink 1s steps(2) infinite; }
+  #title .help { font-size: calc(var(--u) * 5.5); line-height: 1.9; color: #e6e0ff; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #banner {
+    justify-content: flex-start; padding-top: calc(var(--u) * 48);
+    font-size: calc(var(--u) * 10); line-height: 1.6; pointer-events: none;
+  }
+  #banner small { display: block; font-size: calc(var(--u) * 6); color: #ffd166; margin-top: calc(var(--u) * 4); }
+  #ending {
+    background: linear-gradient(rgba(20,18,53,.88) 0%, rgba(20,18,53,.78) 62%, rgba(20,18,53,0) 82%);
+    justify-content: flex-start; padding: calc(var(--u) * 10) calc(var(--u) * 12); gap: calc(var(--u) * 5);
+    overflow-y: auto;
+  }
+  #ending p { font-size: calc(var(--u) * 5.5); line-height: 1.8; max-width: calc(var(--u) * 296); opacity: 0; animation: fadein 1.2s forwards; }
+  #ending p.big { font-size: calc(var(--u) * 9); color: #ffd6e5; }
+  #ending p.firma { color: #ffd166; }
+  #ending button {
+    opacity: 0; animation: fadein 1s forwards; cursor: pointer;
+    font-family: inherit; font-size: calc(var(--u) * 6); color: #2b1d2e; background: #ffd6e5;
+    border: calc(var(--u)) solid #2b1d2e; padding: calc(var(--u) * 4) calc(var(--u) * 6); margin-top: calc(var(--u) * 2);
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* Botones para celular */
+  #touch { display: none; }
+  #touch.show { display: block; }
+  .tbtn {
+    position: fixed; bottom: 18px; width: 74px; height: 74px; border-radius: 50%;
+    background: rgba(255,255,255,.18); border: 3px solid rgba(255,255,255,.45);
+    color: #fff; font-family: inherit; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    touch-action: none;
+  }
+  .tbtn.on { background: rgba(255,214,229,.5); }
+  #tLeft { left: 18px; } #tRight { left: 104px; } #tJump { right: 22px; width: 88px; height: 88px; }
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <canvas id="game" width="320" height="192"></canvas>
+
+  <div class="hud" id="hud" style="display:none">
+    <span><span class="heart">♥</span> <span id="hudHearts">0</span></span>
+    <span id="hudWorld">Mundo 1</span>
+    <button id="soundBtn" title="Sonido (M)">♪ ON</button>
+  </div>
+
+  <div class="overlay show" id="title">
+    <h1 id="titleText"></h1>
+    <div class="para" id="paraText"></div>
+    <div class="blink">Presiona ESPACIO o toca para empezar</div>
+    <div class="help">
+      ← → para moverte · ESPACIO / ↑ para saltar<br>
+      Mantén SALTAR en el aire para flotar<br>
+      Salta encima de los gatitos gruñones · junta corazones
+    </div>
+  </div>
+
+  <div class="overlay" id="banner"></div>
+  <div class="overlay" id="ending"></div>
+</div>
+
+<div id="touch">
+  <button class="tbtn" id="tLeft">◀</button>
+  <button class="tbtn" id="tRight">▶</button>
+  <button class="tbtn" id="tJump">▲</button>
+</div>
+
+<script>
+/* =====================================================================
+   ✏️  PERSONALIZA AQUÍ  ✏️
+   Cambia lo que está entre comillas. No borres las comillas ni las comas.
+   ===================================================================== */
+const CONFIG = {
+  titulo: "Una aventura para ti",
+  para:   "Para: Victor",
+  firma:  "tu papoi ♥",
+
+  // Mensaje final: cada línea entre comillas es un párrafo.
+  mensaje: [
+    "Gracias por acompañarme en todas las etapas de mi vida.",
+    "Te amo por siempre, mi amor.",
+  ],
+};
+
+/* =====================================================================
+   🗺️  LOS MAPAS
+   Cada letra es un cuadrito de 16x16 pixeles. Todas las filas deben
+   tener el mismo largo. Puedes cambiarlos para inventar tus niveles:
+     .  aire           #  suelo           B  bloque de ladrillo
+     =  nube (se atraviesa desde abajo)   o  corazón
+     e  gatito gruñón que camina          f  gatito con alitas que vuela
+     P  donde parte el personaje          C  bandera de guardado
+     F  meta del mundo
+   ===================================================================== */
+const MUNDOS = [
+  {
+    nombre: "Mundo 1: Pradera Feliz",
+    tema: 0,
+    mapa: [
+      "................................................................................................................",
+      "................................................................................................................",
+      "................................................................................................................",
+      "................................................................................................................",
+      "................................................................................................................",
+      "................................................................................................o...............",
+      "..................oooo................oo.......................oooo...o.........................................",
+      "..................BBBB................##.......................BBBB...B...............o.........#...............",
+      ".....................................####............................................o.o.......###..............",
+      "..P...ooo.....e.....................#####....e....e..C..............e........e................#####...e...F.....",
+      "#############################..##########################..##########################...########################",
+      "#############################..##########################..##########################...########################",
+    ],
+  },
+  {
+    nombre: "Mundo 2: Atardecer Dorado",
+    tema: 1,
+    mapa: [
+      "................................................................................................................................",
+      "................................................................................................................................",
+      "................................................................................................................................",
+      ".......................................................................................................oo.......................",
+      "......................................................................................................BBBB......................",
+      "..............................................................................o.................................................",
+      "..........................ooo..............................f.................o.o..................oooo.......f..................",
+      "..........................BBB............oo.......oo......................###.....................BBBB..........................",
+      ".........................................BB.......##.....................####...................................................",
+      "..P..ooo....e....................e................##....e.....C.........#####.......e...e........................e.......F......",
+      "###################...#################......####################...#########...###########...##################################",
+      "###################...#################......####################...#########...###########...##################################",
+    ],
+  },
+  {
+    nombre: "Mundo 3: Cielo Estrellado",
+    tema: 2,
+    mapa: [
+      "........................................................................................................................................",
+      "........................................................................................................................................",
+      "........................................................................................................................................",
+      "..................................................f.........................f...........................................................",
+      "........................................................................................................................................",
+      "........................................................................................................................................",
+      "..........................................................................o...........ooo........................f......................",
+      ".......................oo.......................ooo..................o...===...o......BBB.............oo...................oo...........",
+      ".................oo...====...oo.................===.................===.......===.....................==...................##...........",
+      "..P...ooo.......====........====....oo..e..............C....e...e..........................e.....e....................e...###.....F.....",
+      "###############..................##############......##############...............###################......#############################",
+      "###############..................##############......##############...............###################......#############################",
+    ],
+  },
+];
+
+/* =====================================================================
+   🎨  COLORES DE CADA MUNDO
+   ===================================================================== */
+const TEMAS = [
+  { // 0: día
+    cielo: ["#7fd0ff", "#9cdcff", "#bce8ff", "#dcf4ff"],
+    cerroLejos: "#9fd8a8", cerroCerca: "#6cc07f",
+    pasto: "#56c26a", pastoOscuro: "#3a9a52", tierra: "#b9784a", tierraOscura: "#8f5636",
+    ladrillo: "#e8955a", ladrilloOscuro: "#a85d34", nube: "#ffffff", nubeSombra: "#cfe6ff",
+    astro: { color: "#fff3b0", x: 260, y: 34, r: 14 }, estrellas: false,
+  },
+  { // 1: atardecer
+    cielo: ["#ff8a8a", "#ffa384", "#ffc48a", "#ffe0a6"],
+    cerroLejos: "#d97a95", cerroCerca: "#a8507a",
+    pasto: "#8cc35a", pastoOscuro: "#5f9440", tierra: "#a8613f", tierraOscura: "#7d432b",
+    ladrillo: "#f2a65a", ladrilloOscuro: "#b0623a", nube: "#fff1e6", nubeSombra: "#ffc9b8",
+    astro: { color: "#ffe36e", x: 230, y: 120, r: 26 }, estrellas: false,
+  },
+  { // 2: noche
+    cielo: ["#141235", "#1c1948", "#26215b", "#322c70"],
+    cerroLejos: "#2b2a6b", cerroCerca: "#211f55",
+    pasto: "#9b8cff", pastoOscuro: "#6e5fd6", tierra: "#4b3f8f", tierraOscura: "#372d6e",
+    ladrillo: "#7a6bd6", ladrilloOscuro: "#4f43a0", nube: "#e8e4ff", nubeSombra: "#b3a9f0",
+    astro: { color: "#fff8d6", x: 60, y: 36, r: 12 }, estrellas: true,
+  },
+];
+
+/* =====================================================================
+   🟤  DIBUJOS EN PIXEL ART
+   Cada letra es un pixel de un color (ver la "paleta" debajo de cada uno).
+   El punto "." es transparente.
+   ===================================================================== */
+// Él: circulito café con lentes
+const MONITO_EL = [
+  ".....kkkkkk.....",
+  "...kkbbbbbbkk...",
+  "..kbllbbbbbbbk..",
+  ".kbllbbbbbbbbbk.",
+  "klbbkkkkbkkkkbbk",
+  "klbbkwkkkkwkkbbk",
+  "kbbbkckkbkckkbbk",
+  "kbbbkkkkbkkkkbbk",
+  "kbppbbbkbbkbppbk",
+  "kdbbbbbbkkbbbbdk",
+  ".kdbbbbbbbbbbdk.",
+  "..kddbbbbbbddk..",
+  "...kkddddddkk...",
+  ".....kkkkkk.....",
+  "....kdk..kdk....",
+  "....kkk..kkk....",
+];
+// Tú: circulito café sin lentes y con moñito
+const MONITO_ELLA = [
+  ".....kkkkkkrr.rr",
+  "...kkbbbbbbrrkrr",
+  "..kbllbbbbbbbk..",
+  ".kbllbbbbbbbbbk.",
+  "klbbbbbbbbbbbbbk",
+  "kbbbbwkbbbwkbbbk",
+  "kbbbbkkbbbkkbbbk",
+  "kbbbbbbbbbbbbbbk",
+  "kbppbbbkbbkbppbk",
+  "kdbbbbbbkkbbbbdk",
+  ".kdbbbbbbbbbbdk.",
+  "..kddbbbbbbddk..",
+  "...kkddddddkk...",
+  ".....kkkkkk.....",
+  "....kdk..kdk....",
+  "....kkk..kkk....",
+];
+const PIES_A = ["...kdk....kdk...", "...kkk....kkk..."];
+const PIES_B = [".....kdkkdk.....", ".....kkkkkk....."];
+const PALETA_MONITOS = { k: "#2b1d2e", b: "#a0673f", l: "#c98b5b", d: "#7c4b2b", p: "#ff8fab", w: "#ffffff", c: "#cfe9ff", r: "#ff5c8a" };
+
+const GATITO_GRUÑON = [
+  "................",
+  "................",
+  "................",
+  "................",
+  "..kk.......kk...",
+  ".kdgk.....kgdk..",
+  ".kgggkkkkkgggk..",
+  ".kgdgdgggdgdgk..",
+  "kggkkgggggkkggk.",
+  "kggykgggggkyggk.",
+  "kdgggggpgggggdk.",
+  "kdggwggkggwggdk.",
+  ".kgdgdgggdgdgk..",
+  ".kggdgggggdggk..",
+  "..kgggk.kgggk...",
+  "..kkkkk.kkkkk...",
+];
+const PATAS_GRUÑON = [".kgggk...kgggk..", ".kkkkk...kkkkk.."];
+const PALETA_GRUÑON = { k: "#2b1d2e", g: "#a7a7b2", d: "#6b6b78", y: "#ffd23f", p: "#ff8fab", w: "#e4e4ea" };
+
+const CORAZON = [
+  ".kk...kk.",
+  "kppk.kppk",
+  "kpwpkpppk",
+  "kpppppppk",
+  ".kpppppk.",
+  "..kpppk..",
+  "...kpk...",
+  "....k....",
+];
+const PALETA_CORAZON = { k: "#2b1d2e", p: "#ff5c8a", w: "#ffffff" };
+
+/* =====================================================================
+   De aquí para abajo está el "motor" del juego.
+   ===================================================================== */
+const T = 16, W = 320, H = 192;
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+// ---------- Convertir los dibujos de texto en imágenes ----------
+function hacerSprite(filas, paleta) {
+  const c = document.createElement("canvas");
+  c.width = filas[0].length; c.height = filas.length;
+  const g = c.getContext("2d");
+  filas.forEach((fila, y) => {
+    [...fila].forEach((ch, x) => {
+      if (ch !== "." && paleta[ch]) { g.fillStyle = paleta[ch]; g.fillRect(x, y, 1, 1); }
+    });
+  });
+  return c;
+}
+function espejo(img) {
+  const c = document.createElement("canvas");
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext("2d");
+  g.translate(img.width, 0); g.scale(-1, 1); g.drawImage(img, 0, 0);
+  return c;
+}
+function conPies(base, pies) { return base.slice(0, 14).concat(pies); }
+function framesGato(base, paleta) {
+  const quieto = hacerSprite(base, paleta);
+  const pasoA = hacerSprite(conPies(base, PIES_A), paleta);
+  const pasoB = hacerSprite(conPies(base, PIES_B), paleta);
+  const der = { quieto, pasoA, pasoB };
+  const izq = { quieto: espejo(quieto), pasoA: espejo(pasoA), pasoB: espejo(pasoB) };
+  return { der, izq };
+}
+const SPR = {
+  el: framesGato(MONITO_EL, PALETA_MONITOS),
+  ella: framesGato(MONITO_ELLA, PALETA_MONITOS),
+  gruñon: [hacerSprite(GATITO_GRUÑON, PALETA_GRUÑON), hacerSprite(GATITO_GRUÑON.slice(0, 14).concat(PATAS_GRUÑON), PALETA_GRUÑON)],
+  corazon: hacerSprite(CORAZON, PALETA_CORAZON),
+};
+
+// ---------- Teclado y botones táctiles ----------
+const teclas = { izq: false, der: false, salto: false };
+let saltoPresionado = false; // se activa solo en el momento de apretar
+function apretarSalto() { if (!teclas.salto) saltoPresionado = true; teclas.salto = true; }
+const KEY_IZQ = ["ArrowLeft", "KeyA"], KEY_DER = ["ArrowRight", "KeyD"], KEY_SALTO = ["Space", "ArrowUp", "KeyW", "KeyZ"];
+window.addEventListener("keydown", (e) => {
+  if (KEY_IZQ.includes(e.code)) teclas.izq = true;
+  if (KEY_DER.includes(e.code)) teclas.der = true;
+  if (KEY_SALTO.includes(e.code)) { e.preventDefault(); if (!e.repeat) apretarSalto(); accionPrincipal(); }
+  if (e.code === "Enter") accionPrincipal();
+  if (e.code === "KeyM") alternarSonido();
+});
+window.addEventListener("keyup", (e) => {
+  if (KEY_IZQ.includes(e.code)) teclas.izq = false;
+  if (KEY_DER.includes(e.code)) teclas.der = false;
+  if (KEY_SALTO.includes(e.code)) teclas.salto = false;
+});
+function botonTactil(id, alApretar, alSoltar) {
+  const b = document.getElementById(id);
+  b.addEventListener("pointerdown", (e) => { e.preventDefault(); b.classList.add("on"); alApretar(); });
+  const soltar = (e) => { e.preventDefault(); b.classList.remove("on"); alSoltar(); };
+  b.addEventListener("pointerup", soltar); b.addEventListener("pointercancel", soltar); b.addEventListener("pointerleave", soltar);
+}
+botonTactil("tLeft", () => teclas.izq = true, () => teclas.izq = false);
+botonTactil("tRight", () => teclas.der = true, () => teclas.der = false);
+botonTactil("tJump", () => { apretarSalto(); accionPrincipal(); }, () => teclas.salto = false);
+if (window.matchMedia("(pointer: coarse)").matches || "ontouchstart" in window) {
+  document.getElementById("touch").classList.add("show");
+}
+document.getElementById("title").addEventListener("pointerdown", () => accionPrincipal());
+
+// ---------- Sonido (beeps estilo retro, hechos con código) ----------
+let audio = null, master = null, sonidoOn = true;
+function iniciarAudio() {
+  if (audio) return;
+  try {
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+    master = audio.createGain(); master.gain.value = 0.35; master.connect(audio.destination);
+    setInterval(programarMusica, 50);
+  } catch (e) { audio = null; }
+}
+function alternarSonido() {
+  sonidoOn = !sonidoOn;
+  if (master) master.gain.value = sonidoOn ? 0.35 : 0;
+  document.getElementById("soundBtn").textContent = sonidoOn ? "♪ ON" : "♪ OFF";
+}
+document.getElementById("soundBtn").addEventListener("pointerdown", (e) => { e.stopPropagation(); alternarSonido(); });
+
+function tono(f1, f2, dur, tipo = "square", vol = 0.25, cuando = 0) {
+  if (!audio) return;
+  const t = audio.currentTime + cuando;
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = tipo; o.frequency.setValueAtTime(f1, t);
+  if (f2 !== f1) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+}
+const SFX = {
+  salto:    () => tono(330, 660, 0.12, "square", 0.15),
+  corazon:  () => { tono(988, 988, 0.07, "square", 0.12); tono(1319, 1319, 0.16, "square", 0.12, 0.07); },
+  pisar:    () => tono(260, 70, 0.15, "square", 0.2),
+  morir:    () => { tono(500, 120, 0.5, "triangle", 0.3); },
+  guardar:  () => { tono(660, 660, 0.08, "square", 0.12); tono(880, 880, 0.12, "square", 0.12, 0.08); },
+  meta:     () => [523, 659, 784, 1047].forEach((f, i) => tono(f, f, 0.18, "square", 0.14, i * 0.12)),
+};
+// Melodía original y simple (nota, duración en tiempos)
+const NOTAS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+function freq(n) { const nota = NOTAS[n[0]], oct = +n[n.length - 1]; return 440 * Math.pow(2, (nota + (oct + 1) * 12 - 69) / 12); }
+const MELODIA = [
+  "E5",1,"G5",1,"A5",2,"G5",1,"E5",1,"C5",2,"D5",1,"E5",1,"G5",1,"E5",1,"D5",4,
+  "E5",1,"G5",1,"A5",2,"C6",1,"A5",1,"G5",2,"E5",1,"D5",1,"E5",1,"D5",1,"C5",4,
+];
+const BAJO = ["C3","A2","F2","G2","C3","A2","F2","G2"];
+let musicaT = 0, notaI = 0, tiempoTotal = 0, musicaActiva = false;
+function programarMusica() {
+  if (!audio || !musicaActiva) return;
+  const pulso = estado === "final" ? 0.26 : 0.17;
+  if (musicaT < audio.currentTime) musicaT = audio.currentTime + 0.05;
+  while (musicaT < audio.currentTime + 0.25) {
+    const n = MELODIA[notaI * 2], d = MELODIA[notaI * 2 + 1];
+    const cuando = musicaT - audio.currentTime;
+    tono(freq(n), freq(n), d * pulso * 0.9, "square", 0.05, cuando);
+    if (tiempoTotal % 4 === 0) {
+      const b = BAJO[(tiempoTotal / 4) % BAJO.length];
+      tono(freq(b), freq(b), 4 * pulso * 0.95, "triangle", 0.12, cuando);
+    }
+    // el bajo va por tiempos: avanzamos tiempo a tiempo
+    for (let k = 1; k < d; k++) {
+      if ((tiempoTotal + k) % 4 === 0) {
+        const b = BAJO[((tiempoTotal + k) / 4) % BAJO.length];
+        tono(freq(b), freq(b), 4 * pulso * 0.95, "triangle", 0.12, cuando + k * pulso);
+      }
+    }
+    tiempoTotal += d; musicaT += d * pulso;
+    notaI = (notaI + 1) % (MELODIA.length / 2);
+  }
+}
+
+// ---------- Estado del juego ----------
+let estado = "titulo";       // "titulo" | "jugando" | "meta" | "final"
+let mundoI = 0, nivel = null, camX = 0, frame = 0;
+let corazonesJuntados = 0, corazonesTotales = 0;
+let particulas = [];
+const jugador = { x: 0, y: 0, w: 12, h: 14, vx: 0, vy: 0, enSuelo: false, mira: 1,
+                  coyote: 0, bufferSalto: 0, flotar: 0, muerto: false, tMuerto: 0, anim: 0 };
+
+MUNDOS.forEach(m => m.mapa.forEach(f => { for (const ch of f) if (ch === "o") corazonesTotales++; }));
+
+function cargarMundo(i) {
+  mundoI = i;
+  const m = MUNDOS[i];
+  const ancho = Math.max(...m.mapa.map(f => f.length));
+  nivel = { ancho, alto: m.mapa.length, grid: [], enemigos: [], corazones: [], banderas: [], meta: null, inicio: { x: 2, y: 9 }, tema: TEMAS[m.tema] };
+  m.mapa.forEach((fila, y) => {
+    const f = fila.padEnd(ancho, ".").split("");
+    f.forEach((ch, x) => {
+      if (ch === "P") nivel.inicio = { x, y };
+      else if (ch === "o") nivel.corazones.push({ x: x * T + 3, y: y * T + 4, tomado: false });
+      else if (ch === "e") nivel.enemigos.push({ tipo: "camina", x: x * T + 1, y: y * T + 4, w: 14, h: 12, vx: -0.45, vy: 0, vivo: true, aplastado: 0 });
+      else if (ch === "f") nivel.enemigos.push({ tipo: "vuela", x0: x * T + 2, y0: y * T + 4, x: x * T + 2, y: y * T + 4, w: 12, h: 9, t: x * 7, vivo: true, aplastado: 0 });
+      else if (ch === "C") nivel.banderas.push({ x: x * T, y: y * T, activa: false });
+      else if (ch === "F") nivel.meta = { x: x * T, y: y * T };
+      if ("PoefCF".includes(ch)) f[x] = ".";
+    });
+    nivel.grid.push(f);
+  });
+  nivel.guardado = { x: nivel.inicio.x * T + 2, y: nivel.inicio.y * T + 2 };
+  revivir();
+  camX = Math.max(0, jugador.x - W / 2);
+  document.getElementById("hudWorld").textContent = "Mundo " + (i + 1);
+  mostrarBanner(m.nombre, "", 2200);
+}
+function revivir() {
+  Object.assign(jugador, { x: nivel.guardado.x, y: nivel.guardado.y, vx: 0, vy: 0, muerto: false, tMuerto: 0, flotar: 0, mira: 1 });
+}
+
+// ---------- Choques con el mapa ----------
+function celda(tx, ty) {
+  if (ty < 0 || ty >= nivel.alto) return ".";
+  if (tx < 0 || tx >= nivel.ancho) return "#"; // paredes invisibles a los lados
+  return nivel.grid[ty][tx];
+}
+const esSolido = (tx, ty) => { const c = celda(tx, ty); return c === "#" || c === "B"; };
+const esNube = (tx, ty) => celda(tx, ty) === "=";
+
+function moverX(o) {
+  o.x += o.vx;
+  const arriba = Math.floor(o.y / T), abajo = Math.floor((o.y + o.h - 0.01) / T);
+  if (o.vx > 0) {
+    const tx = Math.floor((o.x + o.w - 0.01) / T);
+    for (let ty = arriba; ty <= abajo; ty++) if (esSolido(tx, ty)) { o.x = tx * T - o.w; o.vx = 0; return true; }
+  } else if (o.vx < 0) {
+    const tx = Math.floor(o.x / T);
+    for (let ty = arriba; ty <= abajo; ty++) if (esSolido(tx, ty)) { o.x = (tx + 1) * T; o.vx = 0; return true; }
+  }
+  return false;
+}
+function moverY(o) {
+  const pieAntes = o.y + o.h;
+  o.y += o.vy;
+  o.enSuelo = false;
+  const izq = Math.floor(o.x / T), der = Math.floor((o.x + o.w - 0.01) / T);
+  if (o.vy > 0) {
+    const ty = Math.floor((o.y + o.h - 0.01) / T);
+    for (let tx = izq; tx <= der; tx++) {
+      if (esSolido(tx, ty) || (esNube(tx, ty) && pieAntes <= ty * T + 0.5)) {
+        o.y = ty * T - o.h; o.vy = 0; o.enSuelo = true; return;
+      }
+    }
+  } else if (o.vy < 0) {
+    const ty = Math.floor(o.y / T);
+    for (let tx = izq; tx <= der; tx++) if (esSolido(tx, ty)) { o.y = (ty + 1) * T; o.vy = 0; return; }
+  }
+}
+const seTocan = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+// ---------- Física del gatito ----------
+const FIS = { acel: 0.22, acelAire: 0.16, freno: 0.22, velMax: 1.8, gravedad: 0.32, salto: -6.2,
+              caidaMax: 5, gravedadFlotando: 0.07, caidaFlotando: 0.85, tiempoFlotar: 55 };
+
+function actualizarJugador() {
+  const j = jugador;
+  if (j.muerto) {
+    j.tMuerto++;
+    if (j.tMuerto > 20) { j.vy = Math.min(j.vy + 0.3, 6); j.y += j.vy; }
+    if (j.tMuerto > 85) revivir();
+    return;
+  }
+  // izquierda / derecha
+  const dir = (teclas.der ? 1 : 0) - (teclas.izq ? 1 : 0);
+  const acel = j.enSuelo ? FIS.acel : FIS.acelAire;
+  if (dir !== 0) { j.vx += dir * acel; j.mira = dir; }
+  else if (j.enSuelo) { j.vx = Math.abs(j.vx) <= FIS.freno ? 0 : j.vx - Math.sign(j.vx) * FIS.freno; }
+  j.vx = Math.max(-FIS.velMax, Math.min(FIS.velMax, j.vx));
+
+  // salto (con un poquito de ayuda: "coyote time" y "buffer")
+  if (saltoPresionado) j.bufferSalto = 8;
+  saltoPresionado = false;
+  j.coyote = j.enSuelo ? 7 : Math.max(0, j.coyote - 1);
+  if (j.bufferSalto > 0) j.bufferSalto--;
+  if (j.bufferSalto > 0 && j.coyote > 0) {
+    j.vy = FIS.salto; j.coyote = 0; j.bufferSalto = 0; j.enSuelo = false; j.saltando = true; SFX.salto();
+  }
+  if (j.vy >= 0) j.saltando = false;
+  if (j.saltando && !teclas.salto && j.vy < -2.5) j.vy = -2.5; // si sueltas rápido, saltas más bajito
+
+  // gravedad y flotar (mantener salto mientras caes)
+  const flotando = !j.enSuelo && j.vy > 0 && teclas.salto && j.flotar > 0;
+  if (flotando) { j.vy = Math.min(j.vy + FIS.gravedadFlotando, FIS.caidaFlotando); j.flotar--; }
+  else j.vy = Math.min(j.vy + FIS.gravedad, FIS.caidaMax);
+  j.flotando = flotando;
+
+  moverX(j);
+  moverY(j);
+  if (j.enSuelo) j.flotar = FIS.tiempoFlotar;
+  if (j.enSuelo && Math.abs(j.vx) > 0.1) j.anim++; else if (j.enSuelo) j.anim = 0;
+
+  if (j.y > H + 24) morir(false);
+
+  // corazones
+  for (const c of nivel.corazones) {
+    if (!c.tomado && seTocan(j, { x: c.x, y: c.y, w: 9, h: 8 })) {
+      c.tomado = true; corazonesJuntados++; SFX.corazon();
+      for (let k = 0; k < 6; k++) particulas.push({ x: c.x + 4, y: c.y + 4, vx: Math.cos(k) * 1.2, vy: Math.sin(k) * 1.2 - 0.5, vida: 25, color: "#ffd6e5" });
+    }
+  }
+  // banderas de guardado
+  for (const b of nivel.banderas) {
+    if (!b.activa && j.x + j.w > b.x + 4 && j.x < b.x + 12) {
+      b.activa = true; nivel.guardado = { x: b.x + 2, y: b.y + 2 }; SFX.guardar();
+    }
+  }
+  // enemigos
+  for (const e of nivel.enemigos) {
+    if (!e.vivo || !seTocan(j, e)) continue;
+    const pisando = j.vy > 0 && (j.y + j.h - j.vy) <= e.y + 6;
+    if (pisando) {
+      e.vivo = false; e.aplastado = 30; SFX.pisar();
+      j.vy = teclas.salto ? -6 : -4; j.flotar = FIS.tiempoFlotar;
+      for (let k = 0; k < 5; k++) particulas.push({ x: e.x + e.w / 2, y: e.y, vx: (k - 2) * 0.6, vy: -1.2, vida: 20, color: "#ffffff" });
+    } else {
+      morir(true);
+    }
+  }
+  // meta
+  if (nivel.meta && j.x + j.w >= nivel.meta.x + 6) llegarMeta();
+}
+function morir(conSalto) {
+  const j = jugador;
+  if (j.muerto) return;
+  j.muerto = true; j.tMuerto = conSalto ? 0 : 60; j.vy = conSalto ? -5 : 0; SFX.morir();
+}
+
+function actualizarEnemigos() {
+  for (const e of nivel.enemigos) {
+    if (!e.vivo) { if (e.aplastado > 0) e.aplastado--; continue; }
+    if (e.tipo === "camina") {
+      e.vy = Math.min(e.vy + FIS.gravedad, FIS.caidaMax);
+      const velAntes = e.vx;
+      const choco = moverX(e);
+      moverY(e);
+      if (choco) { e.vx = -velAntes; continue; } // chocó con una pared: se da vuelta
+      // si adelante hay un precipicio, también se da vuelta
+      const frente = e.vx < 0 ? Math.floor((e.x - 1) / T) : Math.floor((e.x + e.w + 1) / T);
+      const bajoPies = Math.floor((e.y + e.h + 2) / T);
+      if (e.enSuelo && !esSolido(frente, bajoPies) && !esNube(frente, bajoPies)) e.vx = -e.vx;
+      if (e.y > H + 30) e.vivo = false;
+    } else {
+      e.t++;
+      e.x = e.x0 + Math.sin(e.t * 0.02) * 24;
+      e.y = e.y0 + Math.sin(e.t * 0.07) * 8;
+    }
+  }
+}
+
+// ---------- Llegar a la meta / pasar de mundo ----------
+let tMeta = 0;
+function llegarMeta() {
+  estado = "meta"; tMeta = 0; SFX.meta();
+  const ultimo = mundoI === MUNDOS.length - 1;
+  mostrarBanner("¡Mundo " + (mundoI + 1) + " completado!", ultimo ? "Alguien te está esperando..." : "", 2600);
+}
+function actualizarMeta() {
+  const j = jugador;
+  tMeta++;
+  j.vx = 1.2; j.mira = 1;
+  j.vy = Math.min(j.vy + FIS.gravedad, FIS.caidaMax);
+  moverX(j); moverY(j);
+  j.anim++;
+  if (tMeta > 170) {
+    if (mundoI < MUNDOS.length - 1) { estado = "jugando"; cargarMundo(mundoI + 1); }
+    else empezarFinal();
+  }
+}
+
+// ---------- Escena final ----------
+let tFinal = 0;
+const finalJ = { x: -20, y: 0 }, finalElla = { x: 190 };
+function empezarFinal() {
+  estado = "final"; tFinal = 0; finalJ.x = -20;
+  document.getElementById("hud").style.display = "none";
+  ocultarBanner();
+}
+function actualizarFinal() {
+  tFinal++;
+  if (finalJ.x < finalElla.x - 18) { finalJ.x += 0.8; }
+  else if (tFinal % 14 === 0) {
+    particulas.push({ x: finalElla.x - 2 + Math.random() * 6, y: 140, vx: (Math.random() - 0.5) * 0.4, vy: -0.6, vida: 120, corazon: true });
+  }
+  if (finalJ.x >= finalElla.x - 18 && !document.getElementById("ending").classList.contains("show")) {
+    mostrarMensajeFinal();
+  }
+}
+function mostrarMensajeFinal() {
+  const el = document.getElementById("ending");
+  el.innerHTML = "";
+  const lineas = [
+    { t: "¡Lo lograste!", c: "big" },
+    { t: "Juntaste " + corazonesJuntados + " de " + corazonesTotales + " corazones... pero el mío siempre es tuyo ♥" },
+    ...CONFIG.mensaje.map(t => ({ t })),
+    { t: CONFIG.firma, c: "firma" },
+  ];
+  lineas.forEach((l, i) => {
+    const p = document.createElement("p");
+    p.textContent = l.t; if (l.c) p.className = l.c;
+    p.style.animationDelay = (0.4 + i * 1.3) + "s";
+    el.appendChild(p);
+  });
+  const b = document.createElement("button");
+  b.textContent = "Jugar otra vez";
+  b.style.animationDelay = (0.4 + lineas.length * 1.3) + "s";
+  b.addEventListener("pointerdown", (e) => { e.stopPropagation(); reiniciarTodo(); });
+  el.appendChild(b);
+  el.classList.add("show");
+}
+function reiniciarTodo() {
+  document.getElementById("ending").classList.remove("show");
+  corazonesJuntados = 0; particulas = [];
+  document.getElementById("hud").style.display = "flex";
+  estado = "jugando"; cargarMundo(0);
+}
+
+// ---------- Botón principal (empezar) ----------
+function accionPrincipal() {
+  iniciarAudio();
+  if (audio && audio.state === "suspended") audio.resume();
+  if (estado === "titulo") {
+    musicaActiva = true;
+    document.getElementById("title").classList.remove("show");
+    document.getElementById("hud").style.display = "flex";
+    saltoPresionado = false;
+    estado = "jugando"; cargarMundo(0);
+  }
+}
+
+// ---------- Carteles ----------
+let bannerTimer = null;
+function mostrarBanner(texto, sub, ms) {
+  const b = document.getElementById("banner");
+  b.innerHTML = "";
+  const d = document.createElement("div"); d.textContent = texto;
+  if (sub) { const s = document.createElement("small"); s.textContent = sub; d.appendChild(s); }
+  b.appendChild(d); b.classList.add("show");
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(ocultarBanner, ms);
+}
+function ocultarBanner() { document.getElementById("banner").classList.remove("show"); }
+
+// =====================================================================
+//  DIBUJAR
+// =====================================================================
+function circuloPixel(cx, cy, r, color) {
+  ctx.fillStyle = color;
+  for (let dy = -r; dy <= r; dy++) {
+    const dx = Math.floor(Math.sqrt(r * r - dy * dy));
+    ctx.fillRect(Math.round(cx - dx), Math.round(cy + dy), dx * 2 + 1, 1);
+  }
+}
+function nubeFondo(x, y, color, sombra) {
+  ctx.fillStyle = sombra; ctx.fillRect(x + 2, y + 9, 36, 4);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y + 6, 40, 6); ctx.fillRect(x + 6, y + 2, 14, 6); ctx.fillRect(x + 16, y, 14, 8); ctx.fillRect(x + 28, y + 4, 8, 4);
+}
+const ESTRELLAS = Array.from({ length: 60 }, (_, i) => ({ x: (i * 97) % 640, y: (i * 53) % 120, f: i % 3 }));
+
+function dibujarFondo(tema, cx) {
+  // cielo en franjas, con un tramado ("dithering") entre colores
+  const franja = Math.ceil(H / tema.cielo.length);
+  tema.cielo.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(0, i * franja, W, franja); });
+  tema.cielo.forEach((c, i) => {
+    if (i === 0) return;
+    ctx.fillStyle = tema.cielo[i - 1];
+    for (let x = 0; x < W; x += 2) { ctx.fillRect(x, i * franja, 1, 1); ctx.fillRect(x + 1, i * franja + 2, 1, 1); }
+  });
+  if (tema.estrellas) {
+    for (const s of ESTRELLAS) {
+      const x = ((s.x - cx * 0.05) % 640 + 640) % 640;
+      if (x > W) continue;
+      const brillo = (Math.floor(frame / 20) + s.f) % 3 === 0;
+      ctx.fillStyle = brillo ? "#ffffff" : "#b9b3ff";
+      ctx.fillRect(Math.round(x), s.y, 1, 1);
+      if (brillo && s.f === 0) { ctx.fillRect(Math.round(x) - 1, s.y, 3, 1); ctx.fillRect(Math.round(x), s.y - 1, 1, 3); }
+    }
+  }
+  circuloPixel(tema.astro.x, tema.astro.y, tema.astro.r, tema.astro.color);
+  if (tema.estrellas) circuloPixel(tema.astro.x + 5, tema.astro.y - 3, tema.astro.r - 2, tema.cielo[0]); // luna creciente
+  // nubes lejanas
+  for (let i = 0; i < 6; i++) {
+    const x = ((i * 130 - cx * 0.25) % 780 + 780) % 780 - 60;
+    nubeFondo(Math.round(x), 18 + (i * 23) % 50, tema.nube, tema.nubeSombra);
+  }
+  // cerros
+  for (let x = 0; x < W; x++) {
+    const a = x + cx * 0.2;
+    const h1 = 46 + Math.sin(a * 0.018) * 16 + Math.sin(a * 0.045) * 6;
+    ctx.fillStyle = tema.cerroLejos; ctx.fillRect(x, Math.round(H - 40 - h1), 1, h1 + 40);
+    const b = x + cx * 0.45;
+    const h2 = 26 + Math.sin(b * 0.03 + 1) * 12 + Math.sin(b * 0.071) * 4;
+    ctx.fillStyle = tema.cerroCerca; ctx.fillRect(x, Math.round(H - 32 - h2), 1, h2 + 32);
+  }
+}
+
+function dibujarTile(ch, tx, ty, px, py, tema) {
+  if (ch === "#") {
+    ctx.fillStyle = tema.tierra; ctx.fillRect(px, py, T, T);
+    ctx.fillStyle = tema.tierraOscura;
+    const s = (tx * 7 + ty * 13) % 5;
+    ctx.fillRect(px + 3 + s, py + 6, 2, 2); ctx.fillRect(px + 10 - s, py + 11, 2, 2); ctx.fillRect(px + 12, py + 3 + s, 1, 1);
+    if (!esSolido(tx, ty - 1)) {
+      ctx.fillStyle = tema.pasto; ctx.fillRect(px, py, T, 5);
+      ctx.fillStyle = tema.pastoOscuro; ctx.fillRect(px, py + 5, T, 1);
+      ctx.fillStyle = tema.pasto;
+      for (let i = (tx % 2) * 2; i < T; i += 4) ctx.fillRect(px + i, py + 5, 2, 2);
+      ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(px, py, T, 1);
+    }
+  } else if (ch === "B") {
+    ctx.fillStyle = tema.ladrillo; ctx.fillRect(px, py, T, T);
+    ctx.fillStyle = tema.ladrilloOscuro;
+    ctx.fillRect(px, py + 7, T, 1); ctx.fillRect(px, py + 15, T, 1);
+    ctx.fillRect(px + 7, py, 1, 7); ctx.fillRect(px + 3, py + 8, 1, 7); ctx.fillRect(px + 11, py + 8, 1, 7); ctx.fillRect(px + 15, py, 1, 16);
+    ctx.fillStyle = "rgba(255,255,255,.35)"; ctx.fillRect(px, py, T, 1); ctx.fillRect(px, py, 1, T);
+  } else if (ch === "=") {
+    ctx.fillStyle = tema.nubeSombra; ctx.fillRect(px, py + 6, T, 3);
+    ctx.fillStyle = tema.nube; ctx.fillRect(px, py + 2, T, 5);
+    const izq = celda(tx - 1, ty) !== "=", der = celda(tx + 1, ty) !== "=";
+    ctx.fillRect(px + 3, py, 6, 2); ctx.fillRect(px + 10, py + 1, 4, 1);
+    if (izq) { ctx.fillStyle = tema.nubeSombra; ctx.fillRect(px, py + 2, 1, 1); }
+    if (der) { ctx.fillStyle = tema.nubeSombra; ctx.fillRect(px + 15, py + 2, 1, 1); }
+  }
+}
+
+function dibujarMundo() {
+  const tema = nivel.tema, cx = Math.round(camX);
+  dibujarFondo(tema, cx);
+  const t0 = Math.floor(cx / T), t1 = Math.min(nivel.ancho - 1, t0 + W / T + 1);
+  for (let ty = 0; ty < nivel.alto; ty++)
+    for (let tx = t0; tx <= t1; tx++) {
+      const ch = nivel.grid[ty][tx];
+      if (ch !== ".") dibujarTile(ch, tx, ty, tx * T - cx, ty * T, tema);
+    }
+  // banderas de guardado
+  for (const b of nivel.banderas) {
+    const x = b.x - cx;
+    ctx.fillStyle = "#2b1d2e"; ctx.fillRect(x + 7, b.y - 6, 2, 22);
+    ctx.fillStyle = b.activa ? "#ff5c8a" : "#c9c3d9";
+    const ola = b.activa ? Math.floor(frame / 8) % 2 : 0;
+    ctx.fillRect(x + 9, b.y - 6 + ola, 7, 5); ctx.fillRect(x + 9, b.y - 1 + ola, 4, 1);
+  }
+  // meta
+  if (nivel.meta) {
+    const x = nivel.meta.x - cx, y = nivel.meta.y;
+    ctx.fillStyle = "#2b1d2e"; ctx.fillRect(x + 6, y - 80, 4, 96);
+    ctx.fillStyle = "#fff"; ctx.fillRect(x + 7, y - 80, 1, 96);
+    circuloPixel(x + 8, y - 82, 3, "#ffd166");
+    const ola = Math.floor(frame / 10) % 2;
+    ctx.fillStyle = "#ff5c8a"; ctx.fillRect(x + 10, y - 76 + ola, 22, 14); ctx.fillRect(x + 10, y - 62 + ola, 14, 2);
+    ctx.drawImage(SPR.corazon, x + 16, y - 73 + ola);
+    ctx.fillStyle = tema.ladrilloOscuro; ctx.fillRect(x + 2, y + 10, 12, 6);
+  }
+  // corazones
+  for (const c of nivel.corazones) {
+    if (c.tomado) continue;
+    const flota = Math.round(Math.sin((frame + c.x) * 0.08) * 1.5);
+    ctx.drawImage(SPR.corazon, Math.round(c.x - cx), c.y + flota);
+  }
+  // enemigos
+  for (const e of nivel.enemigos) {
+    if (!e.vivo && e.aplastado <= 0) continue;
+    const x = Math.round(e.x - cx), y = Math.round(e.y);
+    if (e.tipo === "camina") {
+      if (!e.vivo) { ctx.save(); ctx.globalAlpha = e.aplastado / 30; ctx.drawImage(SPR.gruñon[0], x, y + 4, 16, 8); ctx.restore(); }
+      else ctx.drawImage(SPR.gruñon[Math.floor(frame / 12) % 2], x, y - 4);
+    } else {
+      const caida = e.vivo ? 0 : (30 - e.aplastado);
+      if (!e.vivo) { ctx.save(); ctx.globalAlpha = e.aplastado / 30; }
+      // alitas que aletean
+      const aleteo = Math.floor(frame / 5) % 2;
+      ctx.fillStyle = "#2b1d2e";
+      ctx.fillRect(x - 5, y - 1 - aleteo * 2 + caida, 6, 4); ctx.fillRect(x + 14, y - 1 - aleteo * 2 + caida, 6, 4);
+      ctx.fillStyle = "#e6f4ff";
+      ctx.fillRect(x - 4, y - aleteo * 2 + caida, 4, 2); ctx.fillRect(x + 15, y - aleteo * 2 + caida, 4, 2);
+      ctx.drawImage(SPR.gruñon[0], x - 1, y - 6 + caida);
+      if (!e.vivo) ctx.restore();
+    }
+  }
+  dibujarJugador(cx);
+  dibujarParticulas(cx);
+}
+
+function spriteGato(set, mira, enSuelo, quieto, anim) {
+  const lado = mira >= 0 ? set.der : set.izq;
+  if (!enSuelo) return lado.pasoB;
+  if (quieto) return lado.quieto;
+  return Math.floor(anim / 7) % 2 ? lado.pasoA : lado.pasoB;
+}
+function dibujarJugador(cx) {
+  const j = jugador;
+  const img = spriteGato(SPR.el, j.mira, j.enSuelo, Math.abs(j.vx) < 0.1, j.anim);
+  let x = Math.round(j.x - cx - 2), y = Math.round(j.y - 2);
+  if (j.flotando) y += Math.floor(frame / 5) % 2; // aleteo al flotar
+  if (j.muerto) {
+    ctx.save(); ctx.translate(x + 8, y + 8); ctx.rotate(Math.PI); ctx.drawImage(img, -8, -8); ctx.restore();
+  } else ctx.drawImage(img, x, y);
+  if (j.flotando && frame % 6 < 3) { ctx.fillStyle = "#ffffff"; ctx.fillRect(x - 1, y + 10, 2, 2); ctx.fillRect(x + 15, y + 10, 2, 2); }
+}
+function dibujarParticulas(cx) {
+  particulas = particulas.filter(p => p.vida > 0);
+  for (const p of particulas) {
+    p.x += p.vx; p.y += p.vy; p.vida--;
+    if (p.corazon) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, p.vida / 40);
+      ctx.drawImage(SPR.corazon, Math.round(p.x - cx + Math.sin(p.y * 0.1) * 3), Math.round(p.y)); ctx.restore();
+    } else { ctx.fillStyle = p.color; ctx.fillRect(Math.round(p.x - cx), Math.round(p.y), 2, 2); }
+  }
+}
+
+function dibujarFinal() {
+  const tema = TEMAS[2];
+  dibujarFondo(tema, tFinal * 0.2);
+  for (let tx = 0; tx < W / T; tx++) for (let ty = 10; ty < 12; ty++) {
+    ctx.fillStyle = tema.tierra; ctx.fillRect(tx * T, ty * T, T, T);
+    if (ty === 10) { ctx.fillStyle = tema.pasto; ctx.fillRect(tx * T, ty * T, T, 5); ctx.fillStyle = tema.pastoOscuro; ctx.fillRect(tx * T, ty * T + 5, T, 1); }
+  }
+  const llego = finalJ.x >= finalElla.x - 18;
+  const imgJ = spriteGato(SPR.el, 1, true, llego, Math.floor(tFinal));
+  ctx.drawImage(imgJ, Math.round(finalJ.x), 144);
+  ctx.drawImage(spriteGato(SPR.ella, -1, true, true, 0), finalElla.x, 144);
+  if (llego) {
+    const bote = Math.floor(tFinal / 15) % 2;
+    ctx.drawImage(SPR.corazon, Math.round((finalJ.x + finalElla.x) / 2 + 4), 128 - bote * 2);
+  }
+  dibujarParticulas(0);
+}
+
+function dibujarTitulo() {
+  const tema = TEMAS[0];
+  dibujarFondo(tema, frame * 0.4);
+  for (let tx = 0; tx < W / T; tx++) for (let ty = 10; ty < 12; ty++) {
+    ctx.fillStyle = tema.tierra; ctx.fillRect(tx * T, ty * T, T, T);
+    if (ty === 10) { ctx.fillStyle = tema.pasto; ctx.fillRect(tx * T, ty * T, T, 5); ctx.fillStyle = tema.pastoOscuro; ctx.fillRect(tx * T, ty * T + 5, T, 1); }
+  }
+  const salto = Math.abs(Math.sin(frame * 0.06)) * 10;
+  ctx.drawImage(SPR.el.der.quieto, 140, Math.round(144 - salto));
+  ctx.drawImage(SPR.ella.izq.quieto, 164, 144);
+}
+
+// =====================================================================
+//  BUCLE PRINCIPAL (60 veces por segundo)
+// =====================================================================
+function actualizar() {
+  frame++;
+  if (estado === "jugando") { actualizarJugador(); actualizarEnemigos(); }
+  else if (estado === "meta") { actualizarMeta(); actualizarEnemigos(); }
+  else if (estado === "final") actualizarFinal();
+  if (estado === "jugando" || estado === "meta") {
+    const objetivo = Math.max(0, Math.min(nivel.ancho * T - W, jugador.x - W / 2 + 8));
+    camX += (objetivo - camX) * 0.15;
+    document.getElementById("hudHearts").textContent = corazonesJuntados + "/" + corazonesTotales;
+  }
+}
+function dibujar() {
+  ctx.clearRect(0, 0, W, H);
+  if (estado === "titulo") dibujarTitulo();
+  else if (estado === "final") dibujarFinal();
+  else dibujarMundo();
+}
+let ultimo = performance.now(), acumulado = 0;
+function bucle(ahora) {
+  acumulado += Math.min(100, ahora - ultimo); ultimo = ahora;
+  while (acumulado >= 1000 / 60) { actualizar(); acumulado -= 1000 / 60; }
+  dibujar();
+  requestAnimationFrame(bucle);
+}
+
+// ---------- Ajustar el tamaño a la pantalla ----------
+function ajustar() {
+  const escala = Math.max(1, Math.min(window.innerWidth / W, window.innerHeight / H) * 0.96);
+  document.getElementById("wrap").style.setProperty("--u", escala + "px");
+}
+window.addEventListener("resize", ajustar);
+ajustar();
+
+document.getElementById("titleText").textContent = CONFIG.titulo;
+document.getElementById("paraText").textContent = CONFIG.para;
+requestAnimationFrame(bucle);
+</script>
+</body>
+</html>
